@@ -1,0 +1,256 @@
+// ==UserScript==
+// @name         Scientific Calculator
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  Embeds a scientific calculator on any webpage.
+// @author       Gemini
+// @match        https://www.drfrost.org/do-question.php?*
+// @grant        GM_addStyle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Inject CSS to style the calculator and the toggle button
+    GM_addStyle(`
+        /* The main calculator container */
+        #calculator-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #2c2c2c;
+            color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            padding: 10px;
+            font-family: 'Arial', sans-serif;
+            width: 320px;
+            z-index: 10000;
+            user-select: none;
+            display: none;
+        }
+
+        /* The draggable header for the calculator */
+        #calculator-header {
+            cursor: move;
+            background-color: #3b3b3b;
+            padding: 8px;
+            border-radius: 8px 8px 0 0;
+            text-align: center;
+            font-weight: bold;
+            margin: -10px -10px 10px -10px;
+        }
+
+        /* The display for the calculator */
+        #calculator-display {
+            width: 100%;
+            height: 50px;
+            background-color: #555;
+            color: #e0e0e0;
+            border: none;
+            border-radius: 8px;
+            font-size: 2em;
+            text-align: right;
+            padding: 0 10px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        /* Container for the buttons, using a grid layout */
+        #calculator-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        /* General button styling */
+        .calc-button {
+            background-color: #444;
+            border: none;
+            color: #fff;
+            padding: 15px;
+            font-size: 1.2em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .calc-button:hover {
+            background-color: #555;
+        }
+
+        .calc-button:active {
+            transform: scale(0.95);
+        }
+
+        /* Specific button styling */
+        .operator {
+            background-color: #ff9500;
+        }
+        .operator:hover {
+            background-color: #e08500;
+        }
+
+        .function-button {
+            background-color: #666;
+            font-size: 1em;
+        }
+
+        .function-button:hover {
+            background-color: #777;
+        }
+
+        .equal {
+            grid-column: span 2;
+            background-color: #2ecc71;
+        }
+
+        .equal:hover {
+            background-color: #27ae60;
+        }
+
+        .clear {
+            background-color: #e74c3c;
+        }
+
+        .clear:hover {
+            background-color: #c0392b;
+        }
+
+        /* The toggle button for showing/hiding the calculator */
+        #toggle-calculator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 10001;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            font-size: 1em;
+        }
+
+        #toggle-calculator:hover {
+            background-color: #555;
+        }
+    `);
+
+    // Create the calculator and toggle button elements
+    const body = document.body;
+
+    const toggleButton = document.createElement('button');
+    toggleButton.id = 'toggle-calculator';
+    toggleButton.textContent = 'Show Calculator';
+    body.appendChild(toggleButton);
+
+    const calculatorContainer = document.createElement('div');
+    calculatorContainer.id = 'calculator-container';
+    calculatorContainer.innerHTML = `
+        <div id="calculator-header">Calculator</div>
+        <input type="text" id="calculator-display" disabled>
+        <div id="calculator-buttons">
+            <button class="calc-button clear">AC</button>
+            <button class="calc-button function-button">sin</button>
+            <button class="calc-button function-button">cos</button>
+            <button class="calc-button function-button">tan</button>
+            <button class="calc-button operator">/</button>
+            <button class="calc-button">7</button>
+            <button class="calc-button">8</button>
+            <button class="calc-button">9</button>
+            <button class="calc-button operator">*</button>
+            <button class="calc-button function-button">log</button>
+            <button class="calc-button">4</button>
+            <button class="calc-button">5</button>
+            <button class="calc-button">6</button>
+            <button class="calc-button operator">-</button>
+            <button class="calc-button function-button">sqrt</button>
+            <button class="calc-button">1</button>
+            <button class="calc-button">2</button>
+            <button class="calc-button">3</button>
+            <button class="calc-button operator">+</button>
+            <button class="calc-button function-button">^</button>
+            <button class="calc-button">0</button>
+            <button class="calc-button">.</button>
+            <button class="calc-button equal">=</button>
+        </div>
+    `;
+    body.appendChild(calculatorContainer);
+
+    const display = document.getElementById('calculator-display');
+    const buttons = document.getElementById('calculator-buttons');
+    const header = document.getElementById('calculator-header');
+    let calculatorVisible = false;
+
+    // --- Toggle functionality ---
+    toggleButton.addEventListener('click', () => {
+        if (calculatorVisible) {
+            calculatorContainer.style.display = 'none';
+            toggleButton.textContent = 'Show Calculator';
+        } else {
+            calculatorContainer.style.display = 'block';
+            toggleButton.textContent = 'Hide Calculator';
+        }
+        calculatorVisible = !calculatorVisible;
+    });
+
+    // --- Drag functionality ---
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    header.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        offsetX = e.clientX - calculatorContainer.offsetLeft;
+        offsetY = e.clientY - calculatorContainer.offsetTop;
+        calculatorContainer.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        calculatorContainer.style.left = `${e.clientX - offsetX}px`;
+        calculatorContainer.style.top = `${e.clientY - offsetY}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        calculatorContainer.style.cursor = 'move';
+    });
+
+    // --- Calculator logic ---
+    let expression = '';
+
+    buttons.addEventListener('click', (e) => {
+        const buttonValue = e.target.textContent;
+
+        if (e.target.classList.contains('clear')) {
+            expression = '';
+            display.value = '';
+        } else if (e.target.classList.contains('equal')) {
+            try {
+                // A simplified evaluation to handle scientific functions
+                let result = expression.replace(/sin/g, 'Math.sin')
+                                        .replace(/cos/g, 'Math.cos')
+                                        .replace(/tan/g, 'Math.tan')
+                                        .replace(/sqrt/g, 'Math.sqrt')
+                                        .replace(/log/g, 'Math.log')
+                                        .replace(/\^/g, '**');
+                // Use a safe wrapper for eval
+                const safeEval = (code) => {
+                    const func = new Function('return ' + code);
+                    return func();
+                };
+                expression = String(safeEval(result));
+                display.value = expression;
+            } catch (error) {
+                display.value = 'Error';
+                expression = '';
+            }
+        } else {
+            expression += buttonValue;
+            display.value = expression;
+        }
+    });
+
+})();
