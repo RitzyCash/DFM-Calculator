@@ -13,7 +13,8 @@ Can be show/hidden with a button in the lower right corner
 1) Open Script.txt
 2) Download [Tampermonkey](https://www.tampermonkey.net/) 
 3) Make A New Script (Click Onto The Extention And Click 'Create New Script')
-4) Go Onto A Task On DFM
+4) Paste Data From Script.txt Into The Script
+5) Go Onto A Task On DFM
 
 ---
 
